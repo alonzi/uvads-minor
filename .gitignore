@@ -1,0 +1,18 @@
+# --- Student data: NEVER commit (FERPA). GitHub is for code only. ---
+data/
+*.csv
+*.xlsx
+*.xls
+*.parquet
+reports/
+figures/
+*.pdf
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
