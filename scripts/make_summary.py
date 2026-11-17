@@ -1,6 +1,6 @@
 """Summary deck: dashboard, home school, majors, and what the action date says about declarations.
 
-Usage:  uv run python scripts/make_summary.py [--out reports/summary.pdf]
+Usage:  uv run python scripts/make_summary.py [--out reports/summary.pdf] [--theme uva]
 
 Writes reports/summary.pdf and reports/summary_dashboard.pdf (dashboard page only).
 All numbers are computed from the snapshot, not hard-coded.
@@ -35,6 +35,33 @@ SCHOOL_SHORT = {"Arts & Sciences Undergraduate": "Arts & Sciences",
                 "Education Undergraduate": "Education"}
 SCHOOL_COLORS = {"Arts & Sciences": "#2b6cb0", "Engineering": "#dd6b20", "Commerce": "#38a169",
                  "Architecture": "#805ad5", "Education": "#d69e2e"}
+
+
+# UVA brand palette: https://brand.virginia.edu/design-assets/colors
+UVA = {"blue": "#232D4B", "orange": "#E57200", "cyan": "#009FDF", "teal": "#25CAD3",
+       "green": "#62BB46", "yellow": "#FDDA24", "magenta": "#EF3F6B", "link_blue": "#495E9D",
+       "light_gray": "#F1F1EF", "medium_gray": "#DADADA", "text_gray": "#666666",
+       "blue25": "#C8CBD2", "orange25": "#F9DCBF"}
+
+THEMES = {
+    "default": {
+        "bg": "white", "card": "#f4f6f9", "header_band": False, "band": None, "accent": None,
+        "title": INK, "subtitle": MUTED, "ink": INK, "muted": MUTED, "label": MUTED,
+        "big": "#2b6cb0", "bars": "#2b6cb0", "other": "#a0aec0",
+        "school": SCHOOL_COLORS, "field": FIELD_COLORS,
+    },
+    "uva": {
+        "bg": "white", "card": UVA["light_gray"], "header_band": True, "band": UVA["blue"],
+        "accent": UVA["orange"], "title": "white", "subtitle": UVA["blue25"],
+        "ink": UVA["blue"], "muted": UVA["text_gray"], "label": UVA["orange"],
+        "big": UVA["orange"], "bars": UVA["blue"], "other": UVA["medium_gray"],
+        "school": {"Arts & Sciences": UVA["blue"], "Engineering": UVA["orange"],
+                   "Commerce": UVA["cyan"]},
+        "field": dict(zip(FIELDS, [UVA["orange"], UVA["blue"], UVA["cyan"], UVA["green"],
+                                   UVA["yellow"], UVA["teal"], UVA["magenta"],
+                                   UVA["link_blue"]])),
+    },
+}
 
 
 def slide(title, subtitle=None):
@@ -73,7 +100,11 @@ def field_legend(ax, fields):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="reports/summary.pdf")
+    ap.add_argument("--theme", choices=list(THEMES), default="default",
+                    help="color theme for the dashboard page ('uva' = UVA brand colors)")
     args = ap.parse_args()
+    if args.theme != "default" and args.out == "reports/summary.pdf":
+        args.out = f"reports/summary_{args.theme}.pdf"
 
     src = latest_snapshot()
     df = load(src)
@@ -149,9 +180,10 @@ def main():
         # 1. Dashboard
         from matplotlib.patches import FancyBboxPatch
 
-        CARD = "#f4f6f9"
+        T = THEMES[args.theme]
+        CARD = T["card"]
         fig = plt.figure(figsize=(W, H))
-        fig.patch.set_facecolor("white")
+        fig.patch.set_facecolor(T["bg"])
 
         def card(x, y, w, h, title=None):
             fig.patches.append(FancyBboxPatch(
@@ -159,85 +191,123 @@ def main():
                 transform=fig.transFigure, facecolor=CARD, edgecolor="none", zorder=-1))
             if title:
                 fig.text(x + 0.015, y + h - 0.035, title.upper(), fontsize=9.5,
-                         weight="bold", color=MUTED)
+                         weight="bold", color=T["label"])
 
-        fig.text(0.04, 0.935, "Data Science Minor", fontsize=24, weight="bold", color=INK)
-        fig.text(0.04, 0.895, f"School of Data Science · UVA · snapshot {src.name[:10]} "
-                 "(Fall 2026)", fontsize=11, color=MUTED)
+        # Header
+        if T["header_band"]:
+            fig.patches.append(plt.Rectangle((0, 0.875), 1, 0.125, color=T["band"],
+                                             transform=fig.transFigure, zorder=-2))
+            fig.patches.append(plt.Rectangle((0, 0.868), 1, 0.007, color=T["accent"],
+                                             transform=fig.transFigure, zorder=-2))
+        fig.text(0.04, 0.935, "Data Science Minor", fontsize=24, weight="bold",
+                 color=T["title"], va="center")
+        fig.text(0.04, 0.895, "School of Data Science · University of Virginia", fontsize=11,
+                 color=T["subtitle"], va="center")
 
-        # Big number
-        card(0.04, 0.47, 0.20, 0.38)
-        fig.text(0.14, 0.665, f"{N}", fontsize=72, weight="bold", color="#2b6cb0",
+        top_y, top_h = 0.45, 0.38
+        # Big number + snapshot date
+        snap = pd.to_datetime(src.name[:19], format="%Y-%m-%d-%H-%M-%S")
+        card(0.04, top_y, 0.20, top_h)
+        fig.text(0.14, top_y + top_h - 0.04, "DATA AS OF", fontsize=9.5, weight="bold",
+                 color=T["label"], ha="center")
+        fig.text(0.14, top_y + top_h - 0.085, f"{snap:%b} {snap.day}, {snap:%Y}", fontsize=19,
+                 weight="bold", color=T["ink"], ha="center")
+        fig.text(0.14, top_y + top_h - 0.118, f"{snap:%A} · {snap:%-I:%M %p}", fontsize=9.5,
+                 color=T["muted"], ha="center")
+        fig.text(0.14, top_y + 0.135, f"{N}", fontsize=64, weight="bold", color=T["big"],
                  ha="center", va="center")
-        fig.text(0.14, 0.555, "current minors", fontsize=15, color=INK, ha="center")
-        fig.text(0.14, 0.51, f"{len(disc)} majors · {df['SCHOOL'].nunique()} schools",
-                 fontsize=10.5, color=MUTED, ha="center")
+        fig.text(0.14, top_y + 0.05, "current minors", fontsize=14, color=T["ink"], ha="center")
+        fig.text(0.14, top_y + 0.017, f"{len(disc)} majors · {df['SCHOOL'].nunique()} schools",
+                 fontsize=9.5, color=T["muted"], ha="center")
 
         # School pie
-        card(0.26, 0.47, 0.34, 0.38, "Home school")
-        pax = fig.add_axes([0.27, 0.50, 0.16, 0.30])
-        pcol = [SCHOOL_COLORS.get(s, "#a0aec0") for s in school_l.index]
+        card(0.26, top_y, 0.34, top_h, "Home school")
+        pax = fig.add_axes([0.27, top_y + 0.03, 0.16, 0.30])
+        pcol = [T["school"].get(s, T["other"]) for s in school_l.index]
         pax.pie(school_l.values, colors=pcol, startangle=90, counterclock=False,
                 wedgeprops={"edgecolor": CARD, "linewidth": 2, "width": 0.45})
         pax.set_aspect("equal")
         for i, (s, v) in enumerate(school_l.items()):
-            yy = 0.755 - i * 0.062
+            yy = top_y + 0.285 - i * 0.062
             fig.patches.append(plt.Rectangle((0.45, yy - 0.012), 0.012, 0.024,
                                              color=pcol[i], transform=fig.transFigure))
-            fig.text(0.468, yy, s, fontsize=10.5, va="center", color=INK, weight="bold")
+            fig.text(0.468, yy, s, fontsize=10.5, va="center", color=T["ink"], weight="bold")
             fig.text(0.468, yy - 0.026, f"{v} students · {100 * v / N:.0f}%", fontsize=9,
-                     va="center", color=MUTED)
+                     va="center", color=T["muted"])
         if len(lumped):
-            fig.text(0.45, 0.49, f"Other = {other_note}", fontsize=8, color=MUTED)
+            fig.text(0.45, top_y + 0.02, f"Other = {other_note}", fontsize=8, color=T["muted"])
 
         # Graduating classes
-        card(0.62, 0.47, 0.34, 0.38, "Minors by graduating class")
-        cax = fig.add_axes([0.64, 0.555, 0.30, 0.22])
+        card(0.62, top_y, 0.34, top_h, "Minors by graduating class")
+        cax = fig.add_axes([0.64, top_y + 0.085, 0.30, 0.22])
         cax.set_facecolor(CARD)
         x = np.arange(len(classes))
-        cax.bar(x, classes.values, color="#2b6cb0", width=0.65)
+        cax.bar(x, classes.values, color=T["bars"], width=0.65)
         for xi, v in zip(x, classes.values):
             cax.text(xi, v + classes.max() * 0.03, str(v), ha="center", fontsize=10,
-                     color=INK, weight="bold")
-        cax.set_xticks(x, [f"'{str(c)[2:]}" for c in classes.index], fontsize=10)
+                     color=T["ink"], weight="bold")
+        cax.set_xticks(x, [f"'{str(c)[2:]}" for c in classes.index], fontsize=10,
+                       color=T["ink"])
         cax.set_yticks([])
         cax.spines[["left", "top", "right"]].set_visible(False)
+        cax.spines["bottom"].set_color(T["muted"])
         cax.set_ylim(0, classes.max() * 1.18)
-        fig.text(0.635, 0.49, "Class = calendar year of expected graduation term",
-                 fontsize=8, color=MUTED)
+        fig.text(0.635, top_y + 0.02, "Class = calendar year of expected graduation term",
+                 fontsize=8, color=T["muted"])
 
         # Top majors
-        card(0.04, 0.06, 0.45, 0.37, "Top majors")
+        bot_y, bot_h = 0.06, 0.36
+        card(0.04, bot_y, 0.45, bot_h, "Top majors")
         top10 = disc.head(10)
         fmap_ = M.drop_duplicates("discipline").set_index("discipline")["field"]
         max_ = top10.max()
         for i, (d_, v) in enumerate(top10.items()):
-            yy = 0.355 - i * 0.028
+            yy = bot_y + 0.285 - i * 0.027
             label = f"{d_} (all)" if d_ == "Computer Science" else d_
-            fig.text(0.055, yy, label, fontsize=9.5, va="center", color=INK)
-            fig.patches.append(plt.Rectangle(
-                (0.215, yy - 0.009), 0.23 * v / max_, 0.018, transform=fig.transFigure,
-                color=FIELD_COLORS[fmap_[d_]]))
+            fig.text(0.055, yy, label, fontsize=9.5, va="center", color=T["ink"])
+            if d_ == "Computer Science":
+                # split CS bar by home school, counts inset
+                cs_s = M[M["discipline"] == d_]["SCHOOL"].value_counts()
+                x0 = 0.215
+                for sch, lab in [("Engineering", "Eng"), ("Arts & Sciences", "College")]:
+                    n_ = int(cs_s.get(sch, 0))
+                    w_ = 0.23 * n_ / max_
+                    fig.patches.append(plt.Rectangle(
+                        (x0, yy - 0.011), w_, 0.022, transform=fig.transFigure,
+                        color=T["school"][sch]))
+                    fig.text(x0 + w_ / 2, yy, f"{lab} {n_}", fontsize=8.5, weight="bold",
+                             color="white", ha="center", va="center")
+                    x0 += w_
+                other_cs = v - int(cs_s.get("Engineering", 0)) - int(cs_s.get("Arts & Sciences", 0))
+                if other_cs:
+                    fig.patches.append(plt.Rectangle(
+                        (x0, yy - 0.011), 0.23 * other_cs / max_, 0.022,
+                        transform=fig.transFigure, color=T["other"]))
+            else:
+                fig.patches.append(plt.Rectangle(
+                    (0.215, yy - 0.009), 0.23 * v / max_, 0.018, transform=fig.transFigure,
+                    color=T["field"][fmap_[d_]]))
             fig.text(0.215 + 0.23 * v / max_ + 0.005, yy, str(v), fontsize=9,
-                     va="center", color=MUTED)
+                     va="center", color=T["muted"])
 
         # Major fields
-        card(0.51, 0.06, 0.45, 0.37, "Major fields")
+        card(0.51, bot_y, 0.45, bot_h, "Major fields")
         fmax = fields.max()
         for i, (f_, v) in enumerate(fields.items()):
-            yy = 0.355 - i * 0.035
-            fig.text(0.525, yy, f_, fontsize=9.5, va="center", color=INK)
+            yy = bot_y + 0.285 - i * 0.034
+            fig.text(0.525, yy, f_, fontsize=9.5, va="center", color=T["ink"])
             fig.patches.append(plt.Rectangle(
                 (0.70, yy - 0.011), 0.20 * v / fmax, 0.022, transform=fig.transFigure,
-                color=FIELD_COLORS[f_]))
+                color=T["field"][f_]))
             fig.text(0.70 + 0.20 * v / fmax + 0.005, yy, str(v), fontsize=9,
-                     va="center", color=MUTED)
-        fig.text(0.525, 0.075, "Double majors in two fields count in both", fontsize=8,
-                 color=MUTED)
+                     va="center", color=T["muted"])
+        fig.text(0.525, bot_y + 0.012, "Double majors in two fields count in both", fontsize=8,
+                 color=T["muted"])
 
         fig.text(0.04, 0.025, f"Source: {src.name}  ·  FERPA-protected — internal use",
-                 fontsize=8, color=MUTED)
-        fig.savefig(out.with_name(out.stem + "_dashboard.pdf"))
+                 fontsize=8, color=T["muted"])
+        fig.savefig(out.with_name(out.stem + "_dashboard.pdf"),
+                    facecolor=fig.get_facecolor())
         pdf.savefig(fig)
         plt.close(fig)
 

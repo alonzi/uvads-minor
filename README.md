@@ -20,6 +20,7 @@ chmod 444 data/raw/*.csv     # raw data is read-only
 
 ```bash
 uv run python scripts/make_summary.py      # reports/summary.pdf + reports/summary_dashboard.pdf
+uv run python scripts/make_summary.py --theme uva   # same, UVA brand colors -> reports/summary_uva*.pdf
 uv run python scripts/make_histograms.py   # reports/histograms.pdf (every 1D and 2D histogram)
 ```
 
